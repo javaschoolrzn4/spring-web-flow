@@ -1,0 +1,225 @@
+Разработка просто приложения с использованием Spring Web Flow
+
+
+Шаг 1: определение необходимых зависимостей приложения
+
+Добавить в приложение зависимость на модуль spring-webflow:
+
+<!-- Spring Web Flow -->
+<dependency>
+    <groupId>org.springframework.webflow</groupId>
+    <artifactId>spring-webflow</artifactId>
+    <version>2.4.5.RELEASE</version>
+</dependency>
+
+
+Шаг 2: проверка необходимых родитеских зависимостей приложения
+
+Проверить \ добавить зависимость на модуль spring-webmvc и spring-context-support:
+
+<!-- Spring Webmvc -->
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-webmvc</artifactId>
+    <version>${spring.version}</version>
+</dependency>
+
+<!-- Spring Context Support -->
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-context-support</artifactId>
+    <version>${spring.version}</version>
+</dependency>
+
+
+Шаг 3: создаем основной конфигурационный файл flow-beans.xml
+
+На уровне WEB-INF создать файл flow-beans.xml и заполнить следующим содержимым:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:flow="http://www.springframework.org/schema/webflow-config"
+       xsi:schemaLocation="http://www.springframework.org/schema/webflow-config
+       http://www.springframework.org/schema/webflow-config/spring-webflow-config-2.0.xsd
+       http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+</beans>
+
+
+Шаг 4: создать исполнителя последовательности
+
+<!-- Шаг № 1 определение главного исполнителя последовательности -->
+<flow:flow-executor id="flowExecutor" flow-registry="flowRegistry"/>
+
+
+Шаг 5: создать реестр последовательностей
+
+<!-- Шаг № 2 определение реестра последовательностей -->
+<!-- Пример определение конкретной последовательностей -->
+<flow:flow-registry id="flowRegistry" flow-builder-services="flowBuilderServices">
+    <flow:flow-location id="pathInBrowser" path="/WEB-INF/flows/springtimes.xml" />
+</flow:flow-registry>
+
+
+Шаг 6: создать компонент делегирования обработчики последовательности
+
+<!-- Шаг № 3 определение необходимых для поиска последовательностей и их выполнения компонентов -->
+<!-- Делегирование обработки последовательностей от DispatcherServlet (поиск пути) -->
+<bean class="org.springframework.webflow.mvc.servlet.FlowHandlerMapping">
+    <property name="flowRegistry" ref="flowRegistry" />
+</bean>
+
+
+Шаг 7: непосредственное выполнение последовательности
+
+<!-- Делегирование обработки последовательностей от DispatcherServlet (непосредственное выполнение) -->
+<bean class="org.springframework.webflow.mvc.servlet.FlowHandlerAdapter">
+    <property name="flowExecutor" ref="flowExecutor" />
+</bean>
+
+
+Шаг 8: донастройка необходимых компонентов
+
+<!-- Шаг № 4 определение builder'а для распознавания ftl шаблонов в качестве представления последовательности -->
+<flow:flow-builder-services id="flowBuilderServices" view-factory-creator="mvcViewFactoryCreator"/>
+
+<bean id="mvcViewFactoryCreator" class="org.springframework.webflow.mvc.builder.MvcViewFactoryCreator">
+    <property name="viewResolvers" ref="freemarkerViewResolver"/>
+</bean>
+
+
+Шаг 9: добавление созданной конфигурации в сервлет (сразу после <servlet-class>)
+
+<init-param>
+    <param-name>contextConfigLocation</param-name>
+    <param-value>/WEB-INF/flow-beans.xml</param-value>
+</init-param>
+
+Шаг 10: создаем директорию определения последовательностей
+
+Создать на уровне WEB-INF директорию flows
+
+
+Шаг 11: создать в директории flows файл springtimes.xml и заполнить его содержимым
+
+<?xml version="1.0" encoding="UTF-8"?>
+<flow xmlns="http://www.springframework.org/schema/webflow"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+		http://www.springframework.org/schema/webflow
+		http://www.springframework.org/schema/webflow/spring-webflow-2.0.xsd">
+
+    <var name="search" class="ru.springtimes.data.SearchData"/>
+
+    <view-state id="welcome" view="springtimes">
+        <transition on="searchEntered" to="searchByData"/>
+        <transition on="cancel" to="endState"/>
+    </view-state>
+
+    <action-state id="searchByData">
+        <evaluate result="search.person" result-type="ru.springtimes.data.Person" expression="springtimesFlowActions.searchBySurname(requestParameters.searchString)" />
+        <transition to="endState" on-exception="java.lang.Exception" />
+        <transition to="showResult" />
+    </action-state>
+
+    <view-state id="showResult" model="search">
+        <transition on="cancel" to="endState"/>
+    </view-state>
+
+    <end-state id="endState" />
+</flow>
+
+
+Шаг 12: создать пакет ru.springtimes.data и в нем
+1) класс Person (а также геттеры и сеттеры):
+
+public class Person implements Serializable {
+    private String surname;
+    private String name;
+    private String middleName;
+}
+
+2) класс SearchData (а также геттеры и сеттеры):
+
+public class SearchData implements Serializable {
+    private Person person;
+}
+
+Шаг 13: создать пакет ru.springtimes.search и в нем
+1) интерфейс SearchService:
+
+public interface SearchService {
+    Person searchBySurname(String surname) throws Exception;
+}
+
+2) его реализацию:
+@Service
+public class SearchServiceImpl implements SearchService {
+    @Override
+    public Person searchBySurname(String surname) throws Exception {
+        if("ivanov".equalsIgnoreCase(surname)) {
+            Person person = new Person();
+            person.setName("Иван");
+            person.setMiddleName("Ивановчи");
+            person.setSurname("Иванов");
+            return person;
+        } else {
+            throw new Exception();
+        }
+    }
+}
+
+Шаг 14: создать пакет ru.springtimes.flow и в нем класс SpringtimesFlowActions:
+
+@Component
+public class SpringtimesFlowActions {
+    @Autowired
+    private SearchService searchService;
+
+    public Person searchBySurname(String surname) throws Exception {
+        Person person = searchService.searchBySurname(surname);
+        if (person != null) {
+            return person;
+        } else {
+            throw new Exception();
+        }
+    }
+}
+
+Шаг 15: создать два шаблона ftl:
+1) springtimes.ftl:
+
+<html>
+<head>
+    <title>Springtime Search</title>
+</head>
+<body>
+<form>
+    <a href="${flowExecutionUrl}&_eventId=searchEntered">Next</a>
+    </br>
+    <input type="hidden" name="_flowExecutionKey" value="${flowExecutionKey}"/> <!--<co id="flowExecutionKey"/>-->
+
+    <input type="text" name="searchString"/><br/>
+
+    <input type="submit" name="_eventId_searchEntered" value="Искать!" />  <!--<co id="phoneEnteredEvent"/>-->
+    <input type="hidden" name="_eventId" value="searchEntered" />
+
+</form>
+</body>
+</html>
+
+2) showResult.ftl:
+
+<html>
+<head>
+    <title>Springtimes Search</title>
+</head>
+<body>
+<h1>${search.person.name}</h1>
+</body>
+</html>
+
+
+Шаг 16: собрать все мысли воедино и попробовать запустить
